@@ -12,7 +12,6 @@ class CPU {
         this.cycles = 0; //number of cycles the CPU is ahead of the PPU
         this.remainingCycles = 0; //remaining cycles to run
         this.halted = false;
-        this.output = "A: 01 F: B0 B: 00 C: 13 D: 00 E: D8 H: 01 L: 4D SP: FFFE PC: 00:0101 (00 C3 13 02)\n";
     }
     
     start() {
@@ -20,7 +19,7 @@ class CPU {
         this.PC = 0x100;
         this.SP = 0xfffe;
         this.IME = 0;
-        this.RF = [0, 0xb0, 0, 0, 0, 0, 0, 0]; // A F B C D E H L
+        this.RF = [1, 0xb0, 0, 0x13, 0, 0xd8, 1, 0x4d]; // A F B C D E H L
         this.IE = 0xff;
         this.IF = 0;
         this.cycles = 0;
@@ -91,15 +90,14 @@ class CPU {
         return this.memory.set(this.SP--, x);
     }
 
-    // IF ADDRESS PROBLEM COME HERE
     pop16() { 
-        let l = this.memory.get(++this.SP), h = this.memory.get(++this.SP);
+        let l = this.memory.get(this.SP++), h = this.memory.get(this.SP++);
         return l | (h << 8);
     }
 
     push16(x) {
         let h = (x & 0xff00) >> 8, l = x & 0xff;
-        this.memory.set(this.SP--, h); this.memory.set(this.SP--, l);
+        this.memory.set(--this.SP, h); this.memory.set(--this.SP, l);
         return x;
     }
 
@@ -484,25 +482,11 @@ class CPU {
         this.halted = true;
     }
 
-    toHex8(x) {
-        let res = x.toString(16);
-        res = '0'.repeat(2-res.length) + res;
-        return res.toUpperCase();
-    }
-
-    toHex16(x) {
-        let res = x.toString(16);
-        res = '0'.repeat(4-res.length) + res;
-        return res.toUpperCase();
-    }
-
     execute(inst) {
         let addr, cc, r8, n;
 
-
-        switch (inst||0) {
+        switch (inst) {
             case 0:
-            case undefined: //zero out memory later and remove this
                 this.cycles += 4;
                 break;
                     
@@ -888,7 +872,7 @@ class CPU {
                 this.cycles += 12;
                 break;
             case 0x31: //LD SP, d16
-                addr = this.get16()
+                addr = this.get16();
                 this.SP = addr;
                 this.cycles += 12;
                 break;
@@ -909,8 +893,7 @@ class CPU {
                 this.cycles += 12;
                 break; 
             case 0xE1: //POP HL
-                n = this.pop16();
-                this.HL = n
+                this.HL = this.pop16();
                 this.cycles += 12;
                 break;
             case 0xF1: //POP AF
@@ -1223,7 +1206,7 @@ class CPU {
                 this.cycles += 8;
                 break;
             
-            case 0xe8:
+            case 0xe8: //add SP, s8
                 n = this.get8();
                 r8 = CPU.signed8(n);                
                 this.flag = ((((this.SP & 0xf) + (n & 0xf)) > 0xf) << 1) | (((this.SP & 0xff) + n) > 0xff);
@@ -1258,7 +1241,7 @@ class CPU {
                 break;
             
             case 0xf3: //DI
-                this.IME = true;
+                this.IME = false;
                 this.cycles += 4;
                 break;
             
@@ -1583,7 +1566,7 @@ class CPU {
             this.execute(this.get8()); 
             this.IME = true;
             this.shouldSetIME = false;
-        }else { //normal execution
+        } else { //normal execution
             this.execute(this.get8());
         }
     }

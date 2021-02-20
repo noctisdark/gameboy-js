@@ -21,8 +21,10 @@ ROMCartridge.load = function(file) {
     /* specialise the buffer here */
     /* NO CONTROLLERS YET */
     let cartridge = new ROMCartridge;
-    cartridge.buffer = buffer;
-    console.log(cartridge.buffer.length.toString(16))
+    cartridge.buffer = [...buffer];
+    for ( let i = buffer.length; i < 0x7fff; i++ )
+        cartridge.buffer[i] = 0;
+    
     return cartridge;
 };
 

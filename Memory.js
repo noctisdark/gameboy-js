@@ -4,7 +4,7 @@ class Memory {
     constructor(system) {
         this.system = system;
         this.system.memory = this;
-        this.RAM = new Array(0x2000 + (0x7f)); //work ram + highram
+        this.RAM = new Array(0x2000 + (0x80)); //work ram + highram
         this.RAM.fill(0);
         this.IE = 0xff;
         //init components
@@ -20,12 +20,11 @@ class Memory {
             return this.system.video.get(x - 0x8000);
         } else if ( 0xa000 <= x && x <= 0xbfff ) { //external ram, if exists
             return this.system.cartridge.ramGet(x - 0xa000);
-        } else if ( 0xe000 <= x && x <= 0xfdff ) {
-            //memory mirror 0xe000-0xfdff (unusable) and 0xc000-0xddff (actual ram)
-            return this.RAM[x - 0xe000];
-        } else if ( 0xc000 <= x && x <= 0xdfff ) {
+        } else if ( 0xc000 <= x && x <= 0xdfff ) { //work ram
             return this.RAM[x - 0xc000];
-        } else if ( 0xfe00 <= x && x <= 0xfe9f ) { //OAM
+        } else if ( 0xe000 <= x && x <= 0xfdff ) {
+            return this.RAM[x - 0xe000];
+        }  else if ( 0xfe00 <= x && x <= 0xfe9f ) { //OAM
             return this.system.video.getOAM(x - 0xfe00);
         } else if ( 0xff00 <= x && x <= 0xff7f ) { //IO
             return this.system.get(x);
@@ -42,11 +41,11 @@ class Memory {
             this.system.video.set(x-0x8000, y);
         } else if ( 0xa000 <= x && x <= 0xbfff ) { //external ram, if exists
             this.system.cartridge.ramSet(x, y);
+        } else if ( 0xc000 <= x && x <= 0xdfff ) {
+            this.RAM[x - 0xc000] = y;
         } else if ( 0xe000 <= x && x <= 0xfdff ) {
             //memory mirror 0xe000-0xfdff (unused) and 0xc000-0xddff (actual ram)
             this.RAM[x - 0xe000] = y;
-        } else if ( 0xc000 <= x && x <= 0xdfff ) {
-            this.RAM[x - 0xc000] = y;
         } else if ( 0xfe00 <= x && x <= 0xfe9f ) { //OAM
             this.system.video.setOAM(x-0xfe00, y);
         } else if ( 0xff00 <= x && x <= 0xff7f ) { //IO

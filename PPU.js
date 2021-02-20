@@ -268,7 +268,7 @@ class LCD {
 
     run() {
         let complete;
-        while (this.remainingCycles) {
+        while (this.remainingCycles > 0) {
             switch (this._STAT & 0x3) {
                 case 2:
                     complete = this.stepOAM();
@@ -280,8 +280,10 @@ class LCD {
                 
                 case 3:
                     complete = this.stepRendering();
+                    //!!!WARNING, PPU IS TAKING 166 CLOCKS INSTEAD OF 172 -- ah no it's 168, what do to with the remaining pixels
+
                     if ( complete ) //GO HBLANK
-                        this.switchMode(0);
+                        this.switchMode(0);    
                     break;
                 
                 case 0:
@@ -437,11 +439,12 @@ class LCD {
                 this.BGState.state = 4;
             case 4: //Pseudostep 5, try to push pixels into the FIFO, stall until it's possible
                 // --- experimental fix
-                while ( this.BGState.FIFO.length < 8 )
-                    this.BGState.FIFO.push(this.BGState.wait.pop());
+                if ( this.BGState.FIFO.length == 0) {
+                    for ( let i = 8; i > 0; i-- )
+                        this.BGState.FIFO.push(this.BGState.wait.pop());
                 
-                if ( this.BGState.FIFO.length == 8 )
                     this.BGState.state = 0;
+                }
                 break;
             case 5: //pause, if needed
                 break;
@@ -452,7 +455,7 @@ class LCD {
     }
 
     tryPush() {
-        if ( this.BGState.FIFO.length) { //consume pixel
+        if ( this.BGState.FIFO.length ) { //consume pixel
             if ( this.scrollOut ) {
                 // waste a pixel
                 //console.log('scrolling out')
@@ -473,13 +476,15 @@ class LCD {
             this.remainingCycles -= 2;
             this.scanlineCycles += 2;
             this.checkTriggers();
-            this.fetchStep();
             this.tryPush();
             this.checkTriggers();
             this.tryPush();
+            this.fetchStep();
         }
 
-        //might cause a problem if fetch not ready
+        //now, this.currentX <= 158
+        
+        //might cause a problem if fetch not ready / also check the 158 condition
         //DIAGNOSE DURING ROM TESTS
         if ( this.remainingCycles ) { //last push
             this.remainingCycles -= 1;
@@ -488,13 +493,17 @@ class LCD {
             this.fetchStep();
             this.tryPush();
             //might push outside -- optimise this
-            if ( this.currentX < 160 ) {
+            if ( this.remainingCycles && this.currentX < 160 ) {
                 this.remainingCycles -= 1;
                 this.scanlineCycles += 1;
                 this.checkTriggers();
                 this.tryPush();
+            } else { //end of line
+
             }
         }
+
+        //console.log('X:', this.currentX, 'FIFO:', this.BGState.FIFO.length, 'Cycles:', this.scanlineCycles - 80)
 
         let complete = false;
         if ( this.currentX == 160 ) {
@@ -665,6 +674,7 @@ class PPU {
             if ( this.currentX <  160 )
                 this.tryPush();
         }
+
 
         let complete = false;
         if ( this.currentX == 160 ) {
