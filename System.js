@@ -125,7 +125,13 @@ class System {
     requestInterrupt(number) {
         this.shouldCatchupCPU = true;
         this.memory.set(0xff0f, this.memory.get(0xff0f) | (1 << number)); //request interrupt
-        this.cpu.halted = false; //remove halt state
+
+        //The HALT mode is exited when the corresponding flag in the IE register is also set
+        //Regardless of the value of IME -- the difference is whether we should service
+        //an interrupt or now
+        // !!! move check interrupts here
+        if ( this.memory.IE & (1 << number) )
+            this.cpu.halted = false; //remove halt state
     }
 
     cancelInterrupt(number) {

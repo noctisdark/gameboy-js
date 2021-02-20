@@ -1518,49 +1518,46 @@ class CPU {
 
     checkInterrupt() {
         //handle interrupts
-        if ( this.IME ) {
+        if ( !this.IME ) return false;
             //V-Blank Interrupt, highest priority
-            if ( (this.IF & 1) && (this.IE & 1) ) {
-                this.IME = false; this.IF &= ~1;
-                console.log('removed V Blank IF');
-                //console.log('important !  VBLANK')
-                this.interruptProcedure(0x40);
-                return true;
-            }
-
-            //LCD STAT
-            if ( (this.IF & 2) && (this.IE & 2) ) {
-                this.IME = false; this.IF &= ~2;
-                this.interruptProcedure(0x48);
-                return true;
-            }
-            
-            //Timer
-            if ( (this.IF & 4) && (this.IE & 4) ) {
-                this.IME = false; this.IF &= ~4;
-                this.interruptProcedure(0x50);
-                return true;
-            }
-
-            //Serial
-            if ( (this.IF & 8) && (this.IE & 8) ) {
-                this.IME = false; this.IF &= ~8;
-                this.interruptProcedure(0x58);
-                return true;
-            }
-
-            //Joypad
-            if ( (this.IF & 16) && (this.IE & 16) ) {
-                this.IME = false; this.IF &= ~16;
-                this.interruptProcedure(0x60);
-                return true;
-            }
+        if ( (this.IF & 1) && (this.IE & 1) ) {
+            this.IME = false; this.IF &= ~1;
+            //console.log('removed V Blank IF');
+            this.interruptProcedure(0x40);
+            return true;
         }
-        return false;
+
+        //LCD STAT
+        if ( (this.IF & 2) && (this.IE & 2) ) {
+            this.IME = false; this.IF &= ~2;
+            this.interruptProcedure(0x48);
+            return true;
+        }
+        
+        //Timer
+        if ( (this.IF & 4) && (this.IE & 4) ) {
+            this.IME = false; this.IF &= ~4;
+            this.interruptProcedure(0x50);
+            return true;
+        }
+
+        //Serial
+        if ( (this.IF & 8) && (this.IE & 8) ) {
+            this.IME = false; this.IF &= ~8;
+            this.interruptProcedure(0x58);
+            return true;
+        }
+
+        //Joypad
+        if ( (this.IF & 16) && (this.IE & 16) ) {
+            this.IME = false; this.IF &= ~16;
+            this.interruptProcedure(0x60);
+            return true;
+        }
     }
 
     step() {
-        let interrupted = this.checkInterrupt();
+        let interrupted = this.checkInterrupt(); //optimize this, only use when needed, for example in System.requestInterrupt
         
         if ( this.shouldSetIME ) { //EI
             this.execute(this.get8()); 
