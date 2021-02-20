@@ -6,7 +6,7 @@ class CPU {
 
         //register file
         this.RF = [0, 0, 0, 0, 0, 0, 0, 0]; // A F B C D E H L
-        this.PC = this._SP = 0;
+        this.PC = this.SP = 0;
         this.IME = false;
         this.shouldSetIME = false;
         this.cycles = 0; //number of cycles the CPU is ahead of the PPU
@@ -25,10 +25,6 @@ class CPU {
         this.IF = 0;
         this.cycles = 0;
     }
-
-    get SP() { console.log('get SP=', this._SP.toString(16)); return this._SP; }
-    set SP(x) { console.log('set SP=', this._SP.toString(16), x.toString(16)); return this._SP=x; }
-
 
     get Z() { return (this.RF[1] & 0x80) >> 7; }
     get N() { return (this.RF[1] & 0x40) >> 6; }
@@ -503,6 +499,7 @@ class CPU {
     execute(inst) {
         let addr, cc, r8, n;
 
+
         switch (inst||0) {
             case 0:
             case undefined: //zero out memory later and remove this
@@ -876,15 +873,18 @@ class CPU {
             
             // 16-bit LOAD
             case 0x01: //LD BC, d16
-                this.BC = this.get16();
+                addr = this.get16();
+                this.BC = addr;
                 this.cycles += 12;
                 break;
             case 0x11: //LD DE, d16
-                this.DE = this.get16();
+                addr = this.get16()
+                this.DE = addr;
                 this.cycles += 12;
                 break;
             case 0x21: //LD HL, d16
-                this.HL = this.get16();
+                addr = this.get16();
+                this.HL = addr;
                 this.cycles += 12;
                 break;
             case 0x31: //LD SP, d16
@@ -909,7 +909,8 @@ class CPU {
                 this.cycles += 12;
                 break; 
             case 0xE1: //POP HL
-                this.HL = this.pop16();
+                n = this.pop16();
+                this.HL = n
                 this.cycles += 12;
                 break;
             case 0xF1: //POP AF

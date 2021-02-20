@@ -12,7 +12,7 @@ class System {
         this.IF = 0;
 
         //used now for missing IO Devices
-//        this.slots = new Array(0x100); this.slots.fill(0);
+        this.slots = new Array(0x100); this.slots.fill(0);
     }
 
     boot() { /* ?? */  }
@@ -38,7 +38,7 @@ class System {
             case 0x43:
                 return this.video.SCX;
             case 0x44:
-                return 0x90; //this.video.LY;
+                return this.video.LY;
             case 0x45:
                 return this.video.LYC;
             case 0x46:
@@ -68,7 +68,7 @@ class System {
             case 0x0f:
                 return this.IF;
             default:
-                return 0xff;// this.slots[x & 0xff];
+                return this.slots[x & 0xff];
         }
     }
 
@@ -117,7 +117,7 @@ class System {
                 this.IF=y;
                 break;
             default:
-                return; //this.slots[x & 0xff]=y;
+                return this.slots[x & 0xff]=y;
         }
     }
 
