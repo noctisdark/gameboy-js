@@ -95,30 +95,37 @@ class LCD {
 
         this.BGState = {
             state: 0, addr: null, high: null, low: null,
-            FIFO: new FIFO(8),
+            FIFO: new FIFO(16),
             wait: []
+        };
+
+        this.OAMState = {
+            state: 0, addr: null, high: null, low: null,
+            idx: 0, count: 0, FIFO: new FIFO(8),
+            triggerState: 0,
+            wait: new Array(8)
         };
 
         this.interruptCondition = false;
         this.reportZero = false;
+        this.spriteSize = 8;
     }
 
     get LCDC() { return this._LCDC; }
     set LCDC(x) {
         if ( !(x & 0x80) ) { this.shutdown(); }
         else { this.getAccess(); }
+        if ( x & 0x4 ) { this.spriteSize = 16; }
+        else { this.spriteSize = 8; }
+        if ( x & 0x2 ) { /*nothing, next frame will them them*/ }
+        else { this.removeSpriteTriggers(); } //-- asymetric behaviour ? should read more about this
+
         this._LCDC = x;
         
-        if ( this._LCDC & 0x20 ) { //trigger to avoid computing
-            if ( this._WX -7 >= 0 ) {
-                this.windowState.willTrigger = null;
-                this.triggers[this._WX-7] = [LCD.Triggers.WINDOW];
-            } else {this.windowState.willTrigger = [LCD.Triggers.WINDOW]; }
-        } else {
-            this.triggers[this._WX-7] = null;
-            this.willTrigger = null;
-            this.windowState.inside = false;
-        }
+        if ( x & 0x20 ) //triggers to avoid computing at each frame
+            this.setWindowTrigger(-1);
+        else
+            this.removeWindowTrigger();
     }
 
     //make function of trigger setting
@@ -133,13 +140,8 @@ class LCD {
     get WX() { return this._WX; }
     set WX(x) {
         //set trigger if window enabled
-        if ( this._LCDC & 0x20 ) {
-            if ( this._WX -7 >= 0 ) {
-                this.windowState.willTrigger = null;
-                this.triggers[this._WX-7] = null;
-                this.triggers[x-7] = [LCD.Triggers.WINDOW];
-            } else { this.windowState.willTrigger = [LCD.Triggers.WINDOW]; }
-        }
+        if ( this._LCDC & 0x20 )
+            this.setWindowTrigger(x);
 
         this._WX = x;
     }
@@ -273,7 +275,9 @@ class LCD {
                 case 2:
                     complete = this.stepOAM();
                     if ( complete ) {
-                        //this.OAMResult = this.getOAMResult();
+                        this.removeSpriteTriggers();
+                        if ( this._LCDC & 2 )
+                            this.setSpriteTriggers(this.getOAMResult());
                         this.switchMode(3);
                     }
                     break;
@@ -326,13 +330,11 @@ class LCD {
 
     // 80 cycles
     // oam.x != 0
-    // LY + 16 >= oam.y
-    // LY + 16 < oam.y
+    //OAM.y > 0 && OAM.y < 160
+    //OAM.x > 0 && OAM.x < 168
 
+    //if behaviour confirmed, optimize
     getOAMResult() {
-        //Sprites not enabled
-        //OAM.y > 0 && OAM.y < 160
-        //OAM.x > 0 && OAM.x < 168
         let priorities = new Array(10), count = 0; priorities.fill(null);
         if ( !(this._LCDC & 2) ) return priorities; 
         for ( let addr = 0x00; addr <= 0x9c; addr += 4 ) {
@@ -342,15 +344,15 @@ class LCD {
                 flags = this._getOAM(addr+3);
             
             //hidden sprites
-            if ( x <= 0 || x >= 168 || this._LY < y || this._LY > y + (this.LCDC & 0x4 ? 16 : 8))
+            if ( x <= 0 || x >= 168 || this._LY < y || this._LY >= y + this.spriteSize )
                 continue; 
             
             //visible sprite, up to 10
             //compute priority, the highest draws last
             let pmax = 9;
-            for ( let i = priorities.length-1; i >0 ; i-- ) {
+            for ( let i = priorities.length-1; i > 0 ; i-- ) {
                 //in case of the equality, the other object came first and won
-                if ( priorities[i] && x >= priorities[i][0] )
+                if ( priorities[i] && x > priorities[i][0] )
                     pmax = i-1;
             }
 
@@ -360,6 +362,67 @@ class LCD {
         }
 
         return priorities;
+    }
+
+    removeWindowTrigger() {
+        let idx = this._WX-7, trigger = this.triggers[idx];
+        if ( trigger ) {
+            if ( trigger[0]  == LCD.Triggers.WINDOW ) //ONLY WINDOW, remove
+                this.triggers[idx] = null;
+            else //SPRITE OR BOTH
+                this.triggers[idx][0] = LCD.Triggers.SPRITE;
+        }
+        
+        this.willTrigger = null;
+        this.windowState.inside = false;
+    }
+
+    setWindowTrigger(x) {
+        if ( this._WX -7 >= 0 ) { //-- check the equality
+            this.windowState.willTrigger = null;
+            if ( x >= 0 ) { this.triggers[this._WX-7]=null; this._WX=x; }
+            if ( !this.triggers[this._WX-7] )
+                this.triggers[this._WX-7] = [LCD.Triggers.WINDOW];
+            else
+                this.triggers[this._WX-7][0] = LCD.Triggers.BOTH;
+        } else { this.windowState.willTrigger = [LCD.Triggers.WINDOW]; }
+    }
+    
+
+    removeSpriteTriggers() {
+        for ( let i = 0; i < 256; i++ ) {
+            let trigger = this.triggers[i];
+            if ( !trigger )
+                continue;
+            
+            if ( trigger[0] == LCD.Triggers.SPRITE )
+                this.triggers[i] = null;
+            else { //window or both
+                trigger[0] = LCD.Triggers.WINDOW;
+                if ( trigger[1] ) trigger.pop();
+            }
+        }
+    }
+
+    setSpriteTriggers(priorities) {
+        for ( let i = priorities.length-1; i >= 0; i-- ) {
+            let sprite = priorities[i], trigger;
+            if ( !sprite ) continue;
+            trigger = this.triggers[sprite[0]];
+
+            if (!trigger) {
+                this.triggers[sprite[0]] = [LCD.Triggers.SPRITE, [sprite]];
+                continue;
+            }
+
+            if ( trigger[0] == LCD.Triggers.WINDOW ) {
+                trigger[0] = LCD.Triggers.BOTH;
+                trigger.push([sprite]);
+            } else { //either sprite or both
+                trigger[1].push(sprite);
+            }
+            
+        }
     }
 
     shiftLeftIndex(list, idx, x) {
@@ -384,8 +447,8 @@ class LCD {
             base = 0x9c00;
         
         let tileNumber = this._get(base + (fetcherY >> 3)*32 + fetcherX - 0x8000), addr;
-        if ( !(this._LCDC & 0x10) && tileNumber < 0x80 ) addr = 0x9000 + tileNumber*16 + 2*(fetcherY%8);
-        else addr = 0x8000 + tileNumber*16 + 2*(fetcherY%8);
+        if ( this._LCDC & 0x10 ) addr = 0x8000 + tileNumber*16 + 2*(fetcherY%8);
+        else addr = 0x9000 + LCD.signed8(tileNumber)*16 + 2*(fetcherY%8);   
         return addr;
     }
 
@@ -404,6 +467,15 @@ class LCD {
         return addr;
     }
 
+    getSpriteTile(sprite) {        
+        let fetcherY = (sprite[3] & 0x40) ? (this.spriteSize-1) - (this._LY - sprite[1]) : this._LY - sprite[1],
+            upper = fetcherY < 8,
+            tileNumber = this.spriteSize == 16 ? (upper ? sprite[2] & 0xfe : sprite[2] | 0x01) : sprite[2],
+            addr = 0x8000 + tileNumber*16 + 2*(fetcherY%8);
+        
+        return addr;
+    }
+
     computePixels(low, high, out) {
         let ret = out || [];
         for ( let i = 0; i < 8; i++ )        
@@ -411,8 +483,36 @@ class LCD {
         return ret;
     }
 
+    composePixels(low, high, sprite, out) {
+        //account for flipX
+        let ret = out || [0, 0, 0, 0, 0, 0, 0, 0],
+            count = 0, 
+            i = sprite[3] & 0x20 ? 7 : 0,
+            inc = sprite[3] & 0x20 ? -1 : 1;
+        
+        //---//console.log('before touch', ret);
+        while ( count < 8 ) {
+            let pixel = (((high & (1 << i)) >> i) << 1) | ((low & (1 << i)) >> i),
+                pre = ret[count];
+            
+            //---//console.log('pre', pre)
+            //write over when the pixel is not translucent
+            if ( !pre || pixel != 0 )
+                ret[count] = [pixel, sprite[3]];
+
+            //---//console.log(i, inc, count, '@', pixel, ret)
+            i += inc;
+            count++;
+        }
+
+        return ret;
+    }
+
     fetchStep() {
-        this.fetchStepBG();
+        //do we really have to fetch when bg is disabled ? --check later
+        if ( this.OAMState.triggerState == 1 && this.BGState.FIFO.length >= 8 )
+            this.fetchStepOAM();
+        else this.fetchStepBG();
     }
 
     fetchStepBG() {
@@ -435,11 +535,11 @@ class LCD {
                 break;
 
             case 3: //Step 4, assemble pixels, try to push
-                this.computePixels(this.BGState.low, this.BGState.high, this.BGState.wait);
+                this.computePixels(this.BGState.low, this.BGState.high, this.BGState.wait); //--modify the function to remove param .wait
                 this.BGState.state = 4;
             case 4: //Pseudostep 5, try to push pixels into the FIFO, stall until it's possible
                 // --- experimental fix
-                if ( this.BGState.FIFO.length == 0) {
+                if ( this.BGState.FIFO.length <= 8) {
                     for ( let i = 8; i > 0; i-- )
                         this.BGState.FIFO.push(this.BGState.wait.pop());
                 
@@ -454,8 +554,78 @@ class LCD {
         }
     }
 
+    fetchStepOAM() {
+        switch (this.OAMState.state) {
+            case 0: //Step 1, get tile
+                //---//console.log('fetching sprites at', this.currentX, '->',this.triggers[this.currentX][1])
+                this.OAMState.addr = this.getSpriteTile(this.triggers[this.currentX][1][this.OAMState.idx]);
+                this.OAMState.state = 1;
+                break;
+            
+            case 1: //Step 2, get lower bits
+                //---//console.log('step 1')
+                this.OAMState.low = this._get(this.OAMState.addr - 0x8000);
+                this.OAMState.state = 2;
+                break;
+            
+            case 2: //Step 3, get higher bits
+                //---//console.log('step 2')
+                this.OAMState.high = this._get(this.OAMState.addr+1 - 0x8000);
+                this.OAMState.state = 3;
+                break;
+
+            case 3:
+                //---//console.log('step 3');
+                //---//console.log('im guessing', this.OAMState.idx + 1, this.OAMState.count)
+                this.composePixels(this.OAMState.low, this.OAMState.high, this.triggers[this.currentX][1][this.OAMState.idx], this.OAMState.wait);
+                if ( ++this.OAMState.idx == this.OAMState.count )
+                    this.OAMState.state = 4; 
+                else {
+                    this.OAMState.state = 0;
+                    break;
+                }
+                
+            case 4: //Pseudostep 5, try to push pixels into the FIFO, stall until it's possible
+                //shouldn't override existing pixels
+                
+                for ( let i = 7 - this.OAMState.FIFO.length; i >= 0; i-- )
+                    this.OAMState.FIFO.push(this.OAMState.wait[i]);
+                
+                this.OAMState.triggerState = 2;
+                break;
+        
+            default:
+                break;
+        }
+    }
+
+    getSpritePixel(p, attr) {
+        let pal =  attr & 0x10 ? this.OBP1 : this.OBP0;
+        //console.log('at', this._LY, this.currentX, 'will get sprite pixel from', p, pal.toString(2), attr.toString(2), '=>', (pal & (0b11 << (2*p))) >> 2*p);
+        return (pal & (0b11 << (2*p))) >> 2*p;
+    }
+
+    getBackgroundPixel(p) {
+        //console.log('at', this._LY, this.currentX, 'will get', this.windowState.inside ? 'window' : 'background' ,'pixel', p, '=>', (this.BGP & (0b11 << (2*p))) >> 2*p);
+        return (this.BGP & (0b11 << (2*p))) >> 2*p;
+    }
+
+    combinePixels() {
+        let bgp = this.BGState.FIFO.pop(),
+            [obp, attr] = this.OAMState.FIFO.pop();
+        
+        if ( obp == 0 )
+            return this.getBackgroundPixel(bgp);
+        
+        if ( !(attr & 0x80) || bgp == 0 ) //obj above
+            return this.getSpritePixel(obp, attr);
+        else //background above
+            return this.getBackgroundPixel(bgp);
+    }
+
     tryPush() {
-        if ( this.BGState.FIFO.length ) { //consume pixel
+        //---//console.log('try push', this.BGState.FIFO.length, this.OAMState.triggerState);
+        if ( this.BGState.FIFO.length >= 8 && this.OAMState.triggerState != 1 ) { //consume pixel
             if ( this.scrollOut ) {
                 // waste a pixel
                 //console.log('scrolling out')
@@ -463,9 +633,24 @@ class LCD {
                 this.scrollOut--;
             } else {
                 // render
-                let pixel = this.BGState.FIFO.pop(), idx = this.currentX++;
-                if ( this._LCDC & 1 ) //--optimize
-                    this.screen[this._LY*160+idx] = (this.BGP & (0b11 << (2*pixel))) >> 2*pixel;
+                // allow sprite rendering 
+                this.OAMState.triggerState = 0;
+
+                let pixel, idx = this.currentX++;
+
+                if ( this._LCDC & 1 ) {
+                    if ( this.OAMState.FIFO.length )
+                        pixel = this.combinePixels();
+                    else 
+                        pixel = this.getBackgroundPixel(this.BGState.FIFO.pop());
+                } else {
+                    if ( this.OAMState.FIFO.length )
+                        pixel = this.getSpritePixel(...this.OAMState.FIFO.pop());
+                    else
+                        pixel = 0;
+                }
+
+                this.screen[this._LY*160+idx] = pixel;
                 
             }
         }
@@ -534,7 +719,6 @@ class LCD {
         //console.log(this.LY, this.LYC);
         if ( this._LY == this.LYC ) {
             this._STAT |= (1 << 2);
-            //console.log('######################################################################')
             this.toggleInterrupt(this._STAT & 0x40);
         } else {
             //this.system.cancelInterrupt(1);
@@ -542,13 +726,32 @@ class LCD {
         }
     }
 
+    //optimize later, i believe we can do something but it's no so much
     checkTriggers() {
         let trigger = this.triggers[this.currentX] || (this.currentX == 0 && this.windowState.willTrigger);
         if ( !trigger ) return;
 
+        // if ( trigger[0] & LCD.Triggers.WINDOW )
+        //     console.log('found window trigger', trigger, 'at', this.currentX, this._LY, this.WY);
+        
+        // if ( trigger[0] & LCD.Triggers.SPRITE )
+        //     console.log('found sprite trigger', trigger, 'at', this.currentX);
+
         //console.log('--------- found trigger -------------')
-        if ( trigger[0] == LCD.Triggers.WINDOW && !this.windowState.inside && this._LY >= this.WY )
-            this.triggerWindow();
+        if ( (trigger[0] & LCD.Triggers.WINDOW) && this._LY >= this.WY && !this.windowState.inside ) //<=======
+            this.triggerWindow();                                                                             //      
+        //unlike window, this contains only visible -- maybe do this same for window and save one comparaison //
+        if ( (trigger[0] & LCD.Triggers.SPRITE) && this.OAMState.triggerState == 0 )
+            this.triggerSprites();
+    }
+
+    triggerSprites() {
+        this.OAMState.triggerState = 1;
+        this.OAMState.state = 0;
+        //this.OAMState.FIFO.reset();
+        this.OAMState.idx = 0;
+        this.OAMState.count = this.triggers[this.currentX][1].length;
+        this.OAMState.wait.fill(null);
     }
 
     triggerWindow() {
@@ -557,7 +760,6 @@ class LCD {
         this.nextX = ((this._WX-7)/8) | 0; //restart rendering 
         this.scrollOut = Math.max(0, 7 - this.WX);
         this.resetBG();
-        //console.log('>>>>>>>>>> TRIGGER WINDOW', this.windowState.counter, this.WX, this.WY);
     }
 
     //!!!! increment window
@@ -585,7 +787,6 @@ class LCD {
     enterScanline() {
         this.scanlineCycles = 0;
         // Result OAM Result
-        this.OAMResult = null;
         //position of the pixel to draw, -- should change definition
         this.currentX = 0;
         //next 8 pixels, used in getTile
@@ -594,12 +795,20 @@ class LCD {
         //reset params
         this.resetWindow();
         this.resetBG();
+        this.resetOAM();
     }
 
     /* RESET Mechanics */
     resetBG() {
         this.BGState.state = 0;
         this.BGState.FIFO.reset();
+    }
+
+    resetOAM() {
+        this.OAMState.state = 0;
+        this.OAMState.triggerState = 0;
+        this.OAMState.FIFO.reset();
+        this.OAMState.idx = this.OAMState.count = 0;
     }
 
     resetWindow() {
@@ -621,258 +830,14 @@ class LCD {
     }
 };
 
-class PPU {
-    constructor(system, video) {
-        //ACCESS TO MAIN MEMORY
-        this.system = system;
-        this.video = video; video.ppu = this;
-        
-        //cycles
-        this.OAMResult = null;
-        
-        //starting mode
-        this.switchMode(2);
-        this.resetLine();
-        //pixels to take out each line, if SCX = 7, we ignore 7 of the 8 we fetched
-        this.scrollOut = 0;
-
-        //Background & Window FIFO
-        this.BGState = {
-            state: 0, addr: null, high: null, low: null,
-            FIFO: new FIFO(16),
-            wait: []
-        };
-    }
-
-    //Utility function to switch modes, also sets interrupts
-    //ISSUE: disable interrupts on mode leave ?
-
-    //Run for the remaining cycles
-
-    prepareRendering() {
-        this.currentX = 0; this.nextX = 0;
-        this.scrollOut = this.SCX % 8;
-    }
-
-    stepRendering() {
-        while ( this.remainingCycles && this.currentX < 158) {
-            this.remainingCycles -= 2;
-            this.scanlineCycles += 2;
-            this.fetchStep();
-            this.tryPush();
-            this.tryPush();
-        }
-
-        //might cause a problem if fetch not ready
-        //DIAGNOSE DURING ROM TESTS
-        if ( this.remainingCycles ) { //last push
-            this.remainingCycles -= 2;
-            this.scanlineCycles += 2;
-            this.fetchStep();
-            this.tryPush();
-            //might push outside -- optimise this
-            if ( this.currentX <  160 )
-                this.tryPush();
-        }
-
-
-        let complete = false;
-        if ( this.currentX == 160 ) {
-            complete = true;
-        }; return complete;
-    }
-
-    //return tile number, inside window to avoid redundancy
-    getTile() {
-        let fetcherX = this.insideWindow ? (this.nextX - ((this.video.WX - 7)/8 | 0)) : ((((this.video.SCX/8)|0) + this.nextX) & 0x1f),
-            fetcherY = this.insideWindow ? (this.video.LY - this.video.WY) : ((this.video.SCY + this.video.LY) & 0xff);
-        
-        this.nextX += 1;
-        let base = 0x9800;
-        if ( ((this.video.LCDC & 0x8) && (!this.insideWindow)) || ((this.video.LCDC & 0x40) && (this.insideWindow)))
-            base = 0x9c00;
-        
-        //console.log('in window ?', this.insideWindow, this.video.LCDC & 0x8, this.video.LCDC & 0x40, this.video.LCDC & 0x20, this.video.WX, this.video.WY);
-
-        //this is the tile number, _get because VRAM isn't accessible from the outside
-        let tileNumber = this.video._get(base + ((fetcherY/8)|0)*32 + fetcherX - 0x8000);
-        let mode = (this.video.LCDC & 0x10) >> 4, addr;
-        //console.log('base is', base.toString(16), 'tileNumber is', tileNumber, 'address mode is', mode);
-        if ( mode ) { //unsigned addressing mode
-            addr = 0x8000 + tileNumber*16 + 2*(fetcherY%8);
-        } else { //signed addressing mode
-            addr = 0x9000 + PPU.signed8(tileNumber)*16 + 2*(fetcherY%8);
-        }
-
-        return addr;
-    }
-
-    // getSprites(i) {
-    //     let tileNumber = this.currentSprites[i][2],
-    //         y = this.currentSprites[i][1] - (this.currentSprites[i][3] & 0x40 ? ((this.video._LCDC & 0x4 ? 16 : 8)) :  this.video._LY),
-    //         addr = 0x8000 + tileNumber*16 + 2*(y%8);;
-        
-    //     return addr;
-    // }
-
-    //Utility function to reset background FIFO, used when entering a window
-    //Utility function to reset sprite FIFO, used when entering a new scanline
-    resetOAM() {
-        
-    }
-
-    //only background for now
-    fetchStep() {
-        this.fetchStepBG();
-        // console.log('fetch step');
-        // if ( this.currentFIFO == this.BGState)
-        //     this.fetchStepBG();
-        // else
-        //     this.fetchStepOAM();
-    }
-
-    // fetchStepOAM() {
-    //     // Maybe needed ? check if we sould return to BGState
-    //     // //sprites not enabled
-    //     // if ( !(this.video._LCDC & 2) ) return;
-        
-    //     switch (this.OAMState.state) {
-    //         case 0:
-    //             console.log('state 0');
-    //             this.OAMState.addr = this.getSprites(this.OAMState.idx);
-    //             this.OAMState.state = 1;
-    //             break;
-    //         case 1:
-    //             this.OAMState.low = this.video._get(this.OAMState.addr - 0x8000);
-    //             this.OAMState.state = 2;
-    //             break;
-    //         case 2:
-    //             this.OAMState.high = this.video._get(this.OAMState.addr+1 - 0x8000);
-    //             this.OAMState.state = 3;
-    //             break;
-    //         case 3: //Step 4, assemble pixels, try to push
-    //             console.log('statu suri');
-    //             this.composePixels(this.OAMState.low, this.OAMState.high, this.OAMState.wait, this.currentSprites[this.OAMState.idx][3] & 0x20);
-    //             if ( ++this.OAMState.idx == this.OAMState.loop )
-    //                 this.OAMState.state = 4;
-    //             else {this.OAMState.state = 0; break};
-    //         case 4: //Pseudostep 5, try to push pixels into the FIFO, stall until it's possible
-    //             this.OAMState.requestPush = true;
-    //             if ( this.OAMState.FIFO.length <= 8 ) {
-    //                 for ( let i = 0; i < 8; i++ )
-    //                     this.OAMState.FIFO.push(this.OAMState.wait.pop());
-    //                 this.OAMState.state = 0;
-    //                 this.OAMState.idx = 0;
-    //                 this.OAMState.loop = 0;
-    //                 this.OAMState.done = true;
-    //             } break;
-    //         case 5: //pause, if needed
-    //             break;
-        
-    //         default:
-    //             break;
-    //     }
-    // }
-
-    //only this for now
-    fetchStepBG() {
-        switch (this.BGState.state) {
-            case 0: //Step 1, get tile
-                this.BGState.addr = this.getTile();
-                console.log('got tile addr', this.BGState.addr.toString(16));
-                this.BGState.state = 1;
-                break;
-            
-            case 1: //Step 2, get lower bits
-                this.BGState.low = this.video._get(this.BGState.addr - 0x8000);
-                console.log('got tile low', this.BGState.low)
-                this.BGState.state = 2;
-                break;
-            
-            case 2: //Step 3, get higher bits
-                this.BGState.high = this.video._get(this.BGState.addr+1 - 0x8000);
-                console.log('got tile high', this.BGState.high)
-                this.BGState.state = 3;
-                break;
-
-            case 3: //Step 4, assemble pixels, try to push
-                this.computePixels(this.BGState.low, this.BGState.high, this.BGState.wait);
-                console.log('assembled pixels', this.BGState.wait)
-                this.BGState.state = 4;
-            case 4: //Pseudostep 5, try to push pixels into the FIFO, stall until it's possible
-                console.log('try push to FIFO');
-                if ( this.BGState.FIFO.length <= 8 ) {
-                    for ( let i = 0; i < 8; i++ )
-                        this.BGState.FIFO.push(this.BGState.wait.pop());
-                    this.BGState.state = 0;
-                } break;
-            case 5: //pause, if needed
-                break;
-        
-            default:
-                break;
-        }
-    }
-
-    //return pixels bit from high/low values, coloring is done later with palette
-    computePixels(low, high, push) {
-        let ret = push || [];
-        for ( let i = 8; i >= 0; i-- ) {
-            let pixel = (((high & (1 << i)) << 1) | (low & (1 << i))) >> i;
-            ret.push(pixel); 
-        };
-        return ret;
-    }
-    
-    // Push pixels to the screen
-    tryPush() {
-        //handle loading
-        if ( !this.windowStarted && (this.video.LCDC & 0x20) && this.currentX >= (this.video.WX-7) && (this.video.LY >= this.video.WY) ) {
-            //console.log('hit window')
-            // When WX is 0 and the SCX & 7 > 0 mode 3 is shortened by 1 cycle -- !!!! NOT ACCOUNTED & UNCHECKED
-            // When the window has already started rendering there is a bug that occurs when WX is changed mid-scanline.
-            // When the value of WX changes after the window has started rendering and the new value of WX is reached again,
-            // a pixel with color value of 0 and the lowest priority is pushed onto the background FIFO
-            // Currently not account for
-            this.windowStarted = true;
-            this.insideWindow = true;
-            this.nextX = ((this.video.WX - 7) / 8) | 0; //restart rendering 
-            this.scrollOut += Math.max(0, 7 - this.video.WX);
-            this.resetBG();
-        }
-
-        //--------------------v maybe here
-        if ( this.BGState.FIFO.length >= 8) { //consume pixel
-            //console.log(this.currentX, (this.video.WX-7), '|', this.video.LY, this.video.WY)
-            if ( this.scrollOut ) {
-                //When SCX & 7 > 0 and there is a sprite at X coordinate 0 of the current scanline then mode 3 is lengthened.
-                //The amount of cycles this lengthens mode 3 by is whatever the lower 3 bits of SCX are.
-                //After this penalty is applied object fetching may be aborted. Note that the timing of the penalty is not confirmed.
-                //It may happen before or after waiting for the fetcher
-                // waste a pixel
-                this.BGState.FIFO.pop();
-                this.scrollOut--;
-            } else {
-                // render
-                let pixel = this.BGState.FIFO.pop(), idx = this.currentX++;
-                this.video.screen[this.video.LY*160+idx] = (this.video.BGP & (0b11 << (2*pixel))) >> 2*pixel;// -- CORRECT TRUE VALUE
-            }
-        } else { ; } //nothing
-    }
-
-    static signed8(x) {
-        if ( x > 0x7f )
-            return x - 256;
-        return x;
-    }
-};
 
 LCD.Triggers = {
     WINDOW: 1,
-    SPRITE: 2
+    SPRITE: 2,
+    BOTH: 3 //IMPLEMENT THIS, with &
 }
 
-module.exports = {LCD, PPU};
+module.exports = {LCD};
 // Note that foreground sprites don't use color 0 - it's transparent instead.
 // Currently there is no blocking memory access during different LCD periods
 // But if this causes some problems, it could be patched fairly easily

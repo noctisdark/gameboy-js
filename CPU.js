@@ -1520,6 +1520,10 @@ class CPU {
         //handle interrupts
         if ( !this.IME ) return false;
             //V-Blank Interrupt, highest priority
+        
+        if ( this.IF == 0 )
+            return this.system.shouldCheckInterrupt = false;
+
         if ( (this.IF & 1) && (this.IE & 1) ) {
             this.IME = false; this.IF &= ~1;
             //console.log('removed V Blank IF');
@@ -1554,11 +1558,14 @@ class CPU {
             this.interruptProcedure(0x60);
             return true;
         }
+
+        return false;
     }
 
-    step() {
-        let interrupted = this.checkInterrupt(); //optimize this, only use when needed, for example in System.requestInterrupt
-        
+    step() {   
+        if ( this.system.shouldCheckInterrupt ) 
+            this.checkInterrupt();
+
         if ( this.shouldSetIME ) { //EI
             this.execute(this.get8()); 
             this.IME = true;

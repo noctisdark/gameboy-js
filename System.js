@@ -7,8 +7,7 @@ class System {
         this.cpu = null;
         this.video = null;
         this.IO = null;
-        this.shouldCatchupPPU = false;
-        this.shouldCatchupCPU = false;
+        this.shouldCheckInterrupt = false;
         this.IF = 0;
 
         //used now for missing IO Devices
@@ -132,6 +131,8 @@ class System {
         // !!! move check interrupts here
         if ( this.memory.IE & (1 << number) )
             this.cpu.halted = false; //remove halt state
+        
+        this.shouldCheckInterrupt = true;
     }
 
     cancelInterrupt(number) {
@@ -141,34 +142,6 @@ class System {
 
     getInterrupt(number) {
         return (this.memory.get(0xff0f) & (1 << number)) >> number;
-    }
-
-    run(N) { //--FIX THIS
-        let ppuCycles = 0;
-        while ( N >= 0) {
-            if ( ppuCycles ) {
-                N -= ppuCycles;
-                this.cpu.catch(ppuCycles); ppuCycles = 0;
-                this.shouldCatchupCPU = false;
-            }
-
-            loop: while ( !this.shouldCatchupPPU ) {
-                this.cpu.step();
-                if ( this.cpu.halted )
-                    break loop;
-            }
-            
-            N -= this.cpu.cycles;
-            this.video.ppu.catch(this.cpu.cycles);
-            this.cpu.cycles = 0; this.shouldCatchupPPU = false;
-
-            while ( !this.shouldCatchupCPU ) {  //--optimise
-                this.cpu.halted = false; //interrupt occured
-                this.video.ppu.catch(4); //four steps
-                ppuCycles += 4;
-            }
-            
-        }
     }
 };
 
