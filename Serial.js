@@ -41,6 +41,7 @@ class Serial {
 };
 
 //8192Hz
+
 Serial.InternalClock = class {
     constructor() {
         this.count = 0;

@@ -109,6 +109,7 @@ class LCD {
         this.interruptCondition = false;
         this.reportZero = false;
         this.spriteSize = 8;
+        this.edge = false; this.lastEdge = false;
     }
 
     get LCDC() { return this._LCDC; }
@@ -239,11 +240,17 @@ class LCD {
         this.run();
     }
 
+    updateRenderingEdge(val) {
+        this.lastEdge = this.edge;
+        this.edge = val;
+    }
+
     switchMode(n) {
+        //console.log('switch mode', n)
         this._STAT &= ~(0b11); //delete current state
         this._STAT |= n; //copy new state
         this.getAccess(); //update access
-        //console.log('enter mode', n, this.remainingCycles);
+        this.updateRenderingEdge(false);
         switch (n) {
             case 3:
                 //No LCD Interrupt
@@ -255,6 +262,10 @@ class LCD {
                 break;
 
             case 1:
+                this.updateRenderingEdge(true);
+                if ( !this.lastEdge && this.edge )
+                    this.system.requestRender();
+
                 this.system.requestInterrupt(0);
                 this.toggleInterrupt(this._STAT & 0x08);
                 break;
@@ -587,8 +598,21 @@ class LCD {
                 
             case 4: //Pseudostep 5, try to push pixels into the FIFO, stall until it's possible
                 //shouldn't override existing pixels
-                
-                for ( let i = 7 - this.OAMState.FIFO.length; i >= 0; i-- )
+                //-> should override translucent pixels, but doesn't here
+                // for ( let i = 7; i >= 0; i-- ) {
+                //     let obj = this.OAMState.FIFO.get(i);
+                //     if ( !obj || !obj[0] )
+                //         this.OAMState.FIFO.put(i, this.OAMState.wait[i]);
+                // }
+
+                let split = 7 - this.OAMState.FIFO.length;
+                for ( let i = 7; i > split; i-- ) {
+                    let obj = this.OAMState.FIFO.get(7 - i);
+                    if ( !obj || !obj[0] )
+                        this.OAMState.FIFO.put(7 - i, this.OAMState.wait[i]);
+                }
+
+                for ( let i = split; i >= 0; i-- )
                     this.OAMState.FIFO.push(this.OAMState.wait[i]);
                 
                 this.OAMState.triggerState = 2;
@@ -687,8 +711,6 @@ class LCD {
 
             }
         }
-
-        //console.log('X:', this.currentX, 'FIFO:', this.BGState.FIFO.length, 'Cycles:', this.scanlineCycles - 80)
 
         let complete = false;
         if ( this.currentX == 160 ) {

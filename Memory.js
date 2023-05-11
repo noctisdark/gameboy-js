@@ -1,5 +1,6 @@
 //Non CGB Mode
 //CGB Mode contains switchables, check later
+
 class Memory {
     constructor(system) {
         this.system = system;
@@ -59,3 +60,5 @@ class Memory {
 };
 
 module.exports = {Memory};
+
+//ONLY ONE INEQUALITY, FIX THIS !!

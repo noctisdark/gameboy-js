@@ -297,21 +297,19 @@ class CPU {
     rlc(idx) {
         let x = this.RF[CPU.LD_POS[idx]],
             b0 = (x & 0x80) >> 7,
-            res = (x << 1) | b0,
-            c = res & 0x100;
+            res = (x << 1) | b0;
         
         this.RF[CPU.LD_POS[idx]] = res & 0xff;
-        this.flag = (((this.RF[CPU.LD_POS[idx]] == 0) << 3) | (c >> 8));
+        this.flag = (((this.RF[CPU.LD_POS[idx]] == 0) << 3) | b0);
     }
 
     rlcHL() {
         let x = this.memory.get(this.HL),
             b0 = (x & 0x80) >> 7,
-            res = (x << 1) | b0,
-            c = res & 0x100;
+            res = (x << 1) | b0;
         
         this.memory.set(this.HL, res & 0xff);
-        this.flag = (((this.memory.get(this.HL) == 0) << 3) | (c >> 8));
+        this.flag = (((this.memory.get(this.HL) == 0) << 3) | b0);
     }
 
     rrc(idx) {
@@ -1263,7 +1261,7 @@ class CPU {
                 break;
         
             default:
-                throw "Unknown opcode " + inst.toString(16) + " at address " + --this.PC;
+                throw "Unknown opcode " + (inst).toString(16) + " at address " + (--this.PC).toString(16);
                 break;
         }        
     }

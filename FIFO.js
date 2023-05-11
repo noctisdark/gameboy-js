@@ -1,4 +1,5 @@
-//No resizable FIFO
+//Non resizable FIFO
+
 class FIFO {
     constructor(size) {
         this.size = size;
@@ -13,6 +14,17 @@ class FIFO {
         
         this.tail = (this.tail + 1)%this.size;
         this.length = Math.min(this.length + 1, this.size);
+    }
+
+    //no checks -- fix
+    put(off, x) {
+        let idx = (this.head + off) % this.size;
+        this.buffer[idx] = x;
+    }
+
+    get(off) {
+        let idx = (this.head + off) % this.size;
+        return this.buffer[idx];
     }
 
     pop() {

@@ -1,4 +1,5 @@
 const { CPU } = require("./CPU");
+const { ROMCartridge } = require('./Cartridge');
 
 class System {
     constructor() {
@@ -7,27 +8,34 @@ class System {
         this.cpu = null;
         this.video = null;
         this.IO = null;
+        this.joypad = null;
+        this.requestRender = () => null;
         this.shouldCheckInterrupt = false;
         this.IF = 0;
 
         //used now for missing IO Devices
         this.slots = new Array(0x100); this.slots.fill(0);
+        this.shouldRender = false;
+        this.bytes = new Array(256);
     }
 
-    boot() { /* ?? */  }
-
-    catchCPU() {
-        let remaining = this.video.ppu.cycles;
-        this.video.ppu.cycles = 0;
-        this.cpu.catch(remaining);
+    boot() {
+        this.cpu.PC = 0;
+        for ( let i = 0; i < 0x100; i++ ) {
+            this.bytes[i] = this.cartridge.buffer[i];
+            this.cartridge.buffer[i] = ROMCartridge.bootSequence[i];
+        }
     }
 
     //IO Set/GET
+    //$ff50 to turnoff boot mode
     get(x) {
         if ( this.cpu.cycles && 0x40 <= (x & 0xff) && (x & 0xff) <= 0x4b )
             this.shouldCatchupPPU = true;
         
         switch (x&0xff) {
+            case 0x00:
+                return this.joypad.register;
             case 0x40:
                 return this.video.LCDC;
             case 0x41:
@@ -76,6 +84,8 @@ class System {
             this.shouldCatchupPPU = true;
         
         switch (x&0xff) {
+            case 0x00:
+                return this.joypad.register=y;
             case 0x40:
                 return this.video.LCDC=y;
             case 0x41:
@@ -115,6 +125,11 @@ class System {
             case 0x0f:
                 this.IF=y;
                 break;
+            case 0x50:
+                if ( y != 1 ) return;
+                for ( let i = 0; i < 0x100; i++ )
+                    this.cartridge.buffer[i] = this.bytes[i];
+                break;
             default:
                 return this.slots[x & 0xff]=y;
         }
@@ -142,6 +157,29 @@ class System {
 
     getInterrupt(number) {
         return (this.memory.get(0xff0f) & (1 << number)) >> number;
+    }
+    
+    /* IMPLEMENT CATCH UP, CRITICAL */
+    step() {
+        if ( this.cpu.halted )  {
+            this.timer.catch(4);
+            this.video.catch(4);
+            return 4;
+        }
+        
+        let diff = this.cpu.cycles;
+        this.cpu.step();
+        diff = this.cpu.cycles - diff;
+    
+        this.timer.catch(diff);
+        this.video.catch(diff);
+        return diff;
+    }
+
+    //not accurate but okay for now
+    catch(steps) {
+        while ( steps > 0 )
+            steps -= this.step();
     }
 };
 
