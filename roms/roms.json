@@ -13,5 +13,6 @@
   "Serpent": "roms/Serpent (USA).gb",
   "Space Invaders": "roms/Space Invaders (USA) (SGB Enhanced).gb",
   "Super Mario Land": "roms/Super Mario Land (World) (Rev 1).gb",
-  "Tetris": "roms/Tetris (World) (Rev A).gb"
+  "Tetris": "roms/Tetris (World) (Rev A).gb",
+  "dmg-acid": "test/dmg-acid2.gb"
 }

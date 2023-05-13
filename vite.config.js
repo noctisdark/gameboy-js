@@ -1,4 +1,4 @@
-import liveReload from 'vite-plugin-live-reload'
+import liveReload from "vite-plugin-live-reload";
 
 module.exports = {
   root: "./",
@@ -6,7 +6,5 @@ module.exports = {
     port: 3000,
   },
 
-  plugins: [
-    liveReload('./**/*.{js,html,css}'),
-  ]
+  plugins: [liveReload("./**/*.{js,html,css}")],
 };

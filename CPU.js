@@ -1,11 +1,14 @@
 class CPU {
-  constructor(system) {
+  constructor(gameboy) {
     //main memory
-    this.system = system;
-    system.cpu = this;
-    this.memory = system.memory;
+    this.gameboy = gameboy;
+    this.memory = gameboy.memory;
 
     //register file
+    this.reset();
+  }
+
+  reset() {
     this.RF = [0, 0, 0, 0, 0, 0, 0, 0]; // A F B C D E H L
     this.PC = this.SP = 0;
     this.IME = false;
@@ -13,17 +16,6 @@ class CPU {
     this.cycles = 0; //number of cycles the CPU is ahead of the PPU
     this.remainingCycles = 0; //remaining cycles to run
     this.halted = false;
-  }
-
-  start() {
-    //all initial configuration here, mostly confirmed values
-    this.PC = 0x100;
-    this.SP = 0xfffe;
-    this.IME = 0;
-    this.RF = [1, 0xb0, 0, 0x13, 0, 0xd8, 1, 0x4d]; // A F B C D E H L
-    this.IE = 0xff;
-    this.IF = 0;
-    this.cycles = 0;
   }
 
   get Z() {
@@ -1734,7 +1726,7 @@ class CPU {
     if (!this.IME) return false;
     //V-Blank Interrupt, highest priority
 
-    if (this.IF == 0) return (this.system.shouldCheckInterrupt = false);
+    if (this.IF == 0) return (this.gameboy.shouldCheckInterrupt = false);
 
     if (this.IF & 1 && this.IE & 1) {
       this.IME = false;
@@ -1780,7 +1772,7 @@ class CPU {
   }
 
   step() {
-    if (this.system.shouldCheckInterrupt) this.checkInterrupt();
+    if (this.gameboy.shouldCheckInterrupt) this.checkInterrupt();
 
     if (this.shouldSetIME) {
       //EI

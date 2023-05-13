@@ -1,13 +1,12 @@
 import FIFO from "./FIFO";
 
-class LCD {
-  constructor(system) {
-    this.system = system;
-    system.video = this;
+class PPU {
+  constructor(gameboy) {
+    this.gameboy = gameboy;
     this.VRAM = new Array(0x2000);
     this.VRAM.fill(0);
-    this.screen = new Array(160 * 144);
-    this.screen.fill(0);
+    this.pixels = new Array(160 * 144);
+    this.pixels.fill(0);
     // 4 bytes per sprite
 
     // Byte 0 - Y position
@@ -190,7 +189,8 @@ class LCD {
     // Always doable
     // 640 cycles -- doesn't stall CPU but only access to HRAM is available to CPU
     let addr = this._DMA;
-    for (let i = 0; i < 0x9f; i++) this.OAM[i] = this.system.memory.get(addr++);
+    for (let i = 0; i < 0x9f; i++)
+      this.OAM[i] = this.gameboy.memory.get(addr++);
   }
 
   shutdown() {
@@ -220,7 +220,7 @@ class LCD {
 
   //optimise memory access conditions
   get(x) {
-    this.system.shouldCatchupPPU = true;
+    this.gameboy.shouldCatchupPPU = true;
     if (!this.VRAMAcess) {
       return 0xff;
     } //can't access VRAM
@@ -229,7 +229,7 @@ class LCD {
 
   //optimise memory access conditions
   set(x, y) {
-    this.system.shouldCatchupPPU = true;
+    this.gameboy.shouldCatchupPPU = true;
     if (!this.VRAMAcess) {
       return;
     } //can't access VRAM
@@ -246,13 +246,13 @@ class LCD {
 
   //optimise memory acess conditions
   getOAM(x) {
-    this.system.shouldCatchupPPU = true;
+    this.gameboy.shouldCatchupPPU = true;
     if (!this.OAMAccess) return 0xff; //can't access OAM
     return this.OAM[x];
   }
 
   setOAM(x, y) {
-    this.system.shouldCatchupPPU = true;
+    this.gameboy.shouldCatchupPPU = true;
     if (!this.OAMAccess) return; //can't access OAM
     this.OAM[x] = y;
   }
@@ -297,9 +297,9 @@ class LCD {
 
       case 1:
         this.updateRenderingEdge(true);
-        if (!this.lastEdge && this.edge) this.system.requestRender();
+        if (!this.lastEdge && this.edge) this.gameboy.requestRender();
 
-        this.system.requestInterrupt(0);
+        this.gameboy.requestInterrupt(0);
         this.toggleInterrupt(this._STAT & 0x08);
         break;
 
@@ -351,7 +351,7 @@ class LCD {
           if (complete) {
             this.incrementLine();
             if (this._LY == 0) {
-              //this.system.cancelInterrupt(0);
+              //this.gameboy.cancelInterrupt(0);
               this.switchMode(2);
               this.windowState.counter = -1;
             }
@@ -415,11 +415,11 @@ class LCD {
     let idx = this._WX - 7,
       trigger = this.triggers[idx];
     if (trigger) {
-      if (trigger[0] == LCD.Triggers.WINDOW)
+      if (trigger[0] == PPU.Triggers.WINDOW)
         //ONLY WINDOW, remove
         this.triggers[idx] = null;
       //SPRITE OR BOTH
-      else this.triggers[idx][0] = LCD.Triggers.SPRITE;
+      else this.triggers[idx][0] = PPU.Triggers.SPRITE;
     }
 
     this.willTrigger = null;
@@ -435,10 +435,10 @@ class LCD {
         this._WX = x;
       }
       if (!this.triggers[this._WX - 7])
-        this.triggers[this._WX - 7] = [LCD.Triggers.WINDOW];
-      else this.triggers[this._WX - 7][0] = LCD.Triggers.BOTH;
+        this.triggers[this._WX - 7] = [PPU.Triggers.WINDOW];
+      else this.triggers[this._WX - 7][0] = PPU.Triggers.BOTH;
     } else {
-      this.windowState.willTrigger = [LCD.Triggers.WINDOW];
+      this.windowState.willTrigger = [PPU.Triggers.WINDOW];
     }
   }
 
@@ -447,10 +447,10 @@ class LCD {
       let trigger = this.triggers[i];
       if (!trigger) continue;
 
-      if (trigger[0] == LCD.Triggers.SPRITE) this.triggers[i] = null;
+      if (trigger[0] == PPU.Triggers.SPRITE) this.triggers[i] = null;
       else {
         //window or both
-        trigger[0] = LCD.Triggers.WINDOW;
+        trigger[0] = PPU.Triggers.WINDOW;
         if (trigger[1]) trigger.pop();
       }
     }
@@ -464,12 +464,12 @@ class LCD {
       trigger = this.triggers[sprite[0]];
 
       if (!trigger) {
-        this.triggers[sprite[0]] = [LCD.Triggers.SPRITE, [sprite]];
+        this.triggers[sprite[0]] = [PPU.Triggers.SPRITE, [sprite]];
         continue;
       }
 
-      if (trigger[0] == LCD.Triggers.WINDOW) {
-        trigger[0] = LCD.Triggers.BOTH;
+      if (trigger[0] == PPU.Triggers.WINDOW) {
+        trigger[0] = PPU.Triggers.BOTH;
         trigger.push([sprite]);
       } else {
         //either sprite or both
@@ -500,7 +500,7 @@ class LCD {
     let tileNumber = this._get(base + (fetcherY >> 3) * 32 + fetcherX - 0x8000),
       addr;
     if (this._LCDC & 0x10) addr = 0x8000 + tileNumber * 16 + 2 * (fetcherY % 8);
-    else addr = 0x9000 + LCD.signed8(tileNumber) * 16 + 2 * (fetcherY % 8);
+    else addr = 0x9000 + PPU.signed8(tileNumber) * 16 + 2 * (fetcherY % 8);
     return addr;
   }
 
@@ -517,7 +517,7 @@ class LCD {
       ),
       addr;
     if (this._LCDC & 0x10) addr = 0x8000 + tileNumber * 16 + 2 * (fetcherY % 8);
-    else addr = 0x9000 + LCD.signed8(tileNumber) * 16 + 2 * (fetcherY % 8);
+    else addr = 0x9000 + PPU.signed8(tileNumber) * 16 + 2 * (fetcherY % 8);
     return addr;
   }
 
@@ -732,7 +732,7 @@ class LCD {
           else pixel = 0;
         }
 
-        this.screen[this._LY * 160 + idx] = pixel;
+        this.pixels[this._LY * 160 + idx] = pixel;
       }
     }
   }
@@ -805,7 +805,7 @@ class LCD {
       this._STAT |= 1 << 2;
       this.toggleInterrupt(this._STAT & 0x40);
     } else {
-      //this.system.cancelInterrupt(1);
+      //this.gameboy.cancelInterrupt(1);
       this._STAT &= ~(1 << 2);
     }
   }
@@ -817,22 +817,22 @@ class LCD {
       (this.currentX == 0 && this.windowState.willTrigger);
     if (!trigger) return;
 
-    // if ( trigger[0] & LCD.Triggers.WINDOW )
+    // if ( trigger[0] & PPU.Triggers.WINDOW )
     //     console.log('found window trigger', trigger, 'at', this.currentX, this._LY, this.WY);
 
-    // if ( trigger[0] & LCD.Triggers.SPRITE )
+    // if ( trigger[0] & PPU.Triggers.SPRITE )
     //     console.log('found sprite trigger', trigger, 'at', this.currentX);
 
     //console.log('--------- found trigger -------------')
     if (
-      trigger[0] & LCD.Triggers.WINDOW &&
+      trigger[0] & PPU.Triggers.WINDOW &&
       this._LY >= this.WY &&
       !this.windowState.inside
     )
       //<=======
       this.triggerWindow(); //
     //unlike window, this contains only visible -- maybe do this same for window and save one comparaison //
-    if (trigger[0] & LCD.Triggers.SPRITE && this.OAMState.triggerState == 0)
+    if (trigger[0] & PPU.Triggers.SPRITE && this.OAMState.triggerState == 0)
       this.triggerSprites();
   }
 
@@ -908,7 +908,7 @@ class LCD {
 
   toggleInterrupt(value) {
     value = value ? true : false;
-    if (!this.interruptCondition && value) this.system.requestInterrupt(1);
+    if (!this.interruptCondition && value) this.gameboy.requestInterrupt(1);
 
     this.interruptCondition = value;
   }
@@ -919,13 +919,13 @@ class LCD {
   }
 }
 
-LCD.Triggers = {
+PPU.Triggers = {
   WINDOW: 1,
   SPRITE: 2,
   BOTH: 3, //IMPLEMENT THIS, with &
 };
 
-export default LCD;
+export default PPU;
 
 // Note that foreground sprites don't use color 0 - it's transparent instead.
 // Currently there is no blocking memory access during different LCD periods

@@ -1,7 +1,6 @@
 class Joypad {
-  constructor(system) {
-    this.system = system;
-    system.joypad = this;
+  constructor(gameboy) {
+    this.gameboy = gameboy;
     Joypad.handles.push(this);
 
     this.state = 0xff; // low button, high direction
@@ -31,8 +30,8 @@ class Joypad {
     if (val) this.state |= 1 << idx;
     else this.state &= ~(1 << idx);
 
-    if (idx < 4 && !button && bit && !val) this.system.requestInterrupt(4);
-    if (idx >= 4 && !direction && bit && !val) this.system.requestInterrupt(4);
+    if (idx < 4 && !button && bit && !val) this.gameboy.requestInterrupt(4);
+    if (idx >= 4 && !direction && bit && !val) this.gameboy.requestInterrupt(4);
 
     this.applyState();
   }

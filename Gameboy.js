@@ -1,31 +1,50 @@
 import CPU from "./CPU";
 import ROMCartridge from "./Cartridge";
+import Memory from "./Memory";
+import PPU from "./PPU";
+import Serial from "./Serial";
+import Joypad from "./Joypad";
+import Timer from "./Timer";
 
-class System {
+class Gameboy {
   constructor() {
-    this.memory = null;
+    this.memory = new Memory(this);
+    this.cpu = new CPU(this);
+    this.ppu = new PPU(this);
+    this.serial = new Serial(this);
+    this.joypad = new Joypad(this);
+    this.timer = new Timer(this);
     this.cartridge = null;
-    this.cpu = null;
-    this.video = null;
     this.IO = null;
-    this.joypad = null;
     this.requestRender = () => null;
     this.shouldCheckInterrupt = false;
     this.IF = 0;
+
+    // reset cpu for good measures
+    this.cpu.reset();
 
     //used now for missing IO Devices
     this.slots = new Array(0x100);
     this.slots.fill(0);
     this.shouldRender = false;
     this.bytes = new Array(256);
+    this.halted = true;
   }
 
   boot() {
-    this.cpu.PC = 0;
+    Joypad.enable();
+    this.cpu.reset();
     for (let i = 0; i < 0x100; i++) {
       this.bytes[i] = this.cartridge.buffer[i];
       this.cartridge.buffer[i] = ROMCartridge.bootSequence[i];
     }
+
+    this.halted = false;
+  }
+
+  shutdown() {
+    this.joypad.destroy();
+    this.halted = true;
   }
 
   //IO Set/GET
@@ -38,29 +57,29 @@ class System {
       case 0x00:
         return this.joypad.register;
       case 0x40:
-        return this.video.LCDC;
+        return this.ppu.LCDC;
       case 0x41:
-        return this.video.STAT;
+        return this.ppu.STAT;
       case 0x42:
-        return this.video.SCY;
+        return this.ppu.SCY;
       case 0x43:
-        return this.video.SCX;
+        return this.ppu.SCX;
       case 0x44:
-        return this.video.LY;
+        return this.ppu.LY;
       case 0x45:
-        return this.video.LYC;
+        return this.ppu.LYC;
       case 0x46:
-        return this.video.DMA;
+        return this.ppu.DMA;
       case 0x47:
-        return this.video.BGP;
+        return this.ppu.BGP;
       case 0x48:
-        return this.video.OBP0;
+        return this.ppu.OBP0;
       case 0x49:
-        return this.video.OBP1;
+        return this.ppu.OBP1;
       case 0x4a:
-        return this.video.WY;
+        return this.ppu.WY;
       case 0x4b:
-        return this.video.WX;
+        return this.ppu.WX;
       case 0x04:
         return this.timer.DIV;
       case 0x05:
@@ -88,29 +107,29 @@ class System {
       case 0x00:
         return (this.joypad.register = y);
       case 0x40:
-        return (this.video.LCDC = y);
+        return (this.ppu.LCDC = y);
       case 0x41:
-        return (this.video.STAT = y);
+        return (this.ppu.STAT = y);
       case 0x42:
-        return (this.video.SCY = y);
+        return (this.ppu.SCY = y);
       case 0x43:
-        return (this.video.SCX = y);
+        return (this.ppu.SCX = y);
       case 0x44:
-        return (this.video.LY = y);
+        return (this.ppu.LY = y);
       case 0x45:
-        return (this.video.LYC = y);
+        return (this.ppu.LYC = y);
       case 0x46:
-        return (this.video.DMA = y);
+        return (this.ppu.DMA = y);
       case 0x47:
-        return (this.video.BGP = y);
+        return (this.ppu.BGP = y);
       case 0x48:
-        return (this.video.OBP0 = y);
+        return (this.ppu.OBP0 = y);
       case 0x49:
-        return (this.video.OBP1 = y);
+        return (this.ppu.OBP1 = y);
       case 0x4a:
-        return (this.video.WY = y);
+        return (this.ppu.WY = y);
       case 0x4b:
-        return (this.video.WX = y);
+        return (this.ppu.WX = y);
       case 0x04:
         return (this.timer.DIV = y);
       case 0x05:
@@ -163,7 +182,7 @@ class System {
   step() {
     if (this.cpu.halted) {
       this.timer.catch(4);
-      this.video.catch(4);
+      this.ppu.catch(4);
       return 4;
     }
 
@@ -172,7 +191,7 @@ class System {
     diff = this.cpu.cycles - diff;
 
     this.timer.catch(diff);
-    this.video.catch(diff);
+    this.ppu.catch(diff);
     return diff;
   }
 
@@ -182,4 +201,4 @@ class System {
   }
 }
 
-export default System;
+export default Gameboy;

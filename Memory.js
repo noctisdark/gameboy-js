@@ -2,9 +2,8 @@
 //CGB Mode contains switchables, check later
 
 class Memory {
-  constructor(system) {
-    this.system = system;
-    this.system.memory = this;
+  constructor(gameboy) {
+    this.gameboy = gameboy;
     this.RAM = new Array(0x2000 + 0x80); //work ram + highram
     this.RAM.fill(0);
     this.IE = 0xff;
@@ -17,13 +16,13 @@ class Memory {
     //console.log('read address', x.toString(16));
     if (x <= 0x7fff) {
       //cartridge handle
-      return this.system.cartridge.get(x);
+      return this.gameboy.cartridge.get(x);
     } else if (0x8000 <= x && x <= 0x9fff) {
       //video ram
-      return this.system.video.get(x - 0x8000);
+      return this.gameboy.ppu.get(x - 0x8000);
     } else if (0xa000 <= x && x <= 0xbfff) {
       //external ram, if exists
-      return this.system.cartridge.ramGet(x - 0xa000);
+      return this.gameboy.cartridge.ramGet(x - 0xa000);
     } else if (0xc000 <= x && x <= 0xdfff) {
       //work ram
       return this.RAM[x - 0xc000];
@@ -31,10 +30,10 @@ class Memory {
       return this.RAM[x - 0xe000];
     } else if (0xfe00 <= x && x <= 0xfe9f) {
       //OAM
-      return this.system.video.getOAM(x - 0xfe00);
+      return this.gameboy.ppu.getOAM(x - 0xfe00);
     } else if (0xff00 <= x && x <= 0xff7f) {
       //IO
-      return this.system.get(x);
+      return this.gameboy.get(x);
     } else if (0xff80 <= x && x <= 0xfffe) {
       //High RAM
       return this.RAM[0x2000 + x - 0xff80];
@@ -47,13 +46,13 @@ class Memory {
     //console.log('set address', x.toString(16), y.toString(16));
     if (x <= 0x7fff) {
       //cartridge
-      this.system.cartridge.set(x, y);
+      this.gameboy.cartridge.set(x, y);
     } else if (0x8000 <= x && x <= 0x9fff) {
       //video ram
-      this.system.video.set(x - 0x8000, y);
+      this.gameboy.ppu.set(x - 0x8000, y);
     } else if (0xa000 <= x && x <= 0xbfff) {
       //external ram, if exists
-      this.system.cartridge.ramSet(x, y);
+      this.gameboy.cartridge.ramSet(x, y);
     } else if (0xc000 <= x && x <= 0xdfff) {
       this.RAM[x - 0xc000] = y;
     } else if (0xe000 <= x && x <= 0xfdff) {
@@ -61,10 +60,10 @@ class Memory {
       this.RAM[x - 0xe000] = y;
     } else if (0xfe00 <= x && x <= 0xfe9f) {
       //OAM
-      this.system.video.setOAM(x - 0xfe00, y);
+      this.gameboy.ppu.setOAM(x - 0xfe00, y);
     } else if (0xff00 <= x && x <= 0xff7f) {
       //IO
-      this.system.set(x, y);
+      this.gameboy.set(x, y);
     } else if (0xff80 <= x && x <= 0xfffe) {
       //High RAM
       this.RAM[0x2000 + x - 0xff80] = y;

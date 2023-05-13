@@ -1,8 +1,9 @@
 import roms from "./roms/roms.json";
 import ROMCartridge from "./Cartridge";
+import Gameboy from "./Gameboy";
 
 class Renderer {
-  constructor(system) {
+  constructor(gameboy) {
     //FRONT END
 
     this.canvas = document.createElement("canvas");
@@ -10,8 +11,7 @@ class Renderer {
     this.imgData = this.ctx.getImageData(0, 0, 160, 144);
 
     //GAMEBOY
-    this.system = system;
-    system.requestRender = () => this.update();
+    this.setGameboy(gameboy);
     this.canvas.width = 160;
     this.canvas.height = 144;
 
@@ -35,6 +35,11 @@ class Renderer {
       "<h3>【﻿ｃｏｍｍａｎｄｓ】 ぴマ益:</h3><strong>【﻿ｕｐ】:</strong> Z<br/><strong>【﻿ｒｉｇｈｔ】:</strong> D<br/><strong>【﻿ｄｏｗｎ】:</strong> S<br><strong>【﻿ｌｅｆｔ】:</strong> Q<br/><strong>【﻿Ａ】 (どさテ):</strong> A<br/><strong>【﻿Ｂ】　(テ-ヿ):</strong> E<br/><strong>【﻿ｓｔａｒｔ】:</strong> P<br><strong>【﻿ｓｅｌｅｃｔ】:</strong> O";
   }
 
+  setGameboy(gameboy) {
+    this.gameboy = gameboy;
+    this.gameboy.requestRender = () => this.update();
+  }
+
   attach(parent) {
     const canvasContainer = document.createElement("div");
     canvasContainer.classList.add("gameboyRenderer");
@@ -51,20 +56,24 @@ class Renderer {
   }
 
   update() {
-    let screen = this.system.video.screen,
-      imgData = this.imgData,
-      data = imgData.data;
+    let pixels = this.gameboy.ppu.pixels,
+      outputImageData = this.imgData.data;
 
     for (let j = 0; j < 144; j++)
       for (let i = 0; i < 160; i++) {
         let idx = j * 160 + i,
-          pixel = screen[idx];
+          pixel = pixels[idx];
 
-        data[idx * 4 + 0] = this[pixel][0];
-        data[idx * 4 + 1] = this[pixel][1];
-        data[idx * 4 + 2] = this[pixel][2];
-        data[idx * 4 + 3] = 255; //--unneeded
+        outputImageData[idx * 4 + 0] = this[pixel][0];
+        outputImageData[idx * 4 + 1] = this[pixel][1];
+        outputImageData[idx * 4 + 2] = this[pixel][2];
+        outputImageData[idx * 4 + 3] = 255; //--unneeded
       }
+  }
+
+  step(n) {
+    this.gameboy.catch(n);
+    this.ctx.putImageData(this.imgData, 0, 0);
   }
 
   loop() {
@@ -72,6 +81,7 @@ class Renderer {
       diff,
       fps = 0,
       avg = 60;
+
     let _frame = () => {
       window.requestAnimationFrame(_frame);
       if (start) {
@@ -84,8 +94,9 @@ class Renderer {
           "ムゕ億";
       }
 
+      if (this.gameboy.halted) return;
       start = new Date();
-      this.system.catch(456 * 154);
+      this.gameboy.catch(456 * 154);
       this.ctx.putImageData(this.imgData, 0, 0);
     };
 
@@ -94,7 +105,7 @@ class Renderer {
 
   createSelect() {
     const select = document.createElement("select");
-    for ( const [key, value] of Object.entries(roms) ) {
+    for (const [key, value] of Object.entries(roms)) {
       const option = document.createElement("option");
       option.value = value;
       option.innerText = key;
@@ -106,8 +117,12 @@ class Renderer {
   }
 
   async onGameChange(gameUrl) {
-    this.system.cartridge = await ROMCartridge.load(gameUrl);
-    this.system.boot();    
+    this.gameboy.shutdown();
+    const cartridge = await ROMCartridge.load(gameUrl);
+    const gameboy = new Gameboy();
+    gameboy.cartridge = cartridge;
+    this.setGameboy(gameboy);
+    this.gameboy.boot();
   }
 }
 

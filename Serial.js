@@ -1,13 +1,12 @@
-import System from "./System";
+// Needs fixing
 
 class Serial {
-  constructor(system) {
-    this.system = system;
-    system.serial = this;
+  constructor(gameboy) {
+    this.gameboy = gameboy;
     this._SB = 0;
     this._SC = 0;
     this.clock = new Serial.InternalClock();
-    this.device = null;
+    this.device = this.initDevice();
     this.__blarrg = [];
   }
 
@@ -30,19 +29,37 @@ class Serial {
     this._SC = x;
   }
 
+  initDevice() {
+    this.device = {
+      //doesn't work, avoid the bugs
+      exchange(bit) {
+        this.byte = (this.byte << 1) | bit;
+        this.idx %= 8;
+        if (this.idx == 0) {
+          this.bytes.push(this.byte);
+          this.byte = 0;
+        }
+        return 0;
+      },
+      idx: 0,
+      byte: 0,
+      bytes: [],
+    };
+  }
+
   tick() {
     let edge = this.clock.state;
     this.clock.tick();
     edge = !edge && this.clock.state;
     if (this._SC & 0x80 && edge) {
       //transfer is on
-      //this.system.cancelInterrupt(3);
+      //this.gameboy.cancelInterrupt(3);
       let bit = this.device.exchange((this.SB & 0x80) >> 7);
       this.SB = ((this.SB << 1) & 0xff) | bit;
       if (this.device.idx == 0) {
         //complete
         this._SC &= ~0x80;
-        this.system.requestInterrupt(3);
+        this.gameboy.requestInterrupt(3);
       }
     }
   }

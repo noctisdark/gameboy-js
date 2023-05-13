@@ -1,9 +1,6 @@
-import System from "./System";
-
 class Timer {
-  constructor(system) {
-    this.system = system;
-    system.timer = this;
+  constructor(gameboy) {
+    this.gameboy = gameboy;
     this._DIV = 0; //Divider Register
     this._TIMA = 0; //Timer Counter
     this.TMA = 0; //Timer Modulo
@@ -16,7 +13,7 @@ class Timer {
   tick() {
     if (this.untilReload == 0) {
       this._TIMA = this.TMA;
-      this.system.requestInterrupt(2);
+      this.gameboy.requestInterrupt(2);
       this.untilReload = -1; //disable
     }
 
