@@ -18,5 +18,8 @@
   "devDependencies": {
     "prettier": "2.8.8",
     "vite": "^4.3.5"
+  },
+  "dependencies": {
+    "vite-plugin-live-reload": "^3.0.2"
   }
 }
