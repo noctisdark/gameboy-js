@@ -1,15 +1,16 @@
+import roms from "./roms/roms.json";
+import ROMCartridge from "./Cartridge";
+
 class Renderer {
   constructor(system) {
     //FRONT END
 
     this.canvas = document.createElement("canvas");
-    this.canvas.classList.add("gameboyRenderer");
     this.ctx = this.canvas.getContext("2d");
     this.imgData = this.ctx.getImageData(0, 0, 160, 144);
 
     //GAMEBOY
     this.system = system;
-    system.renderer = this;
     system.requestRender = () => this.update();
     this.canvas.width = 160;
     this.canvas.height = 144;
@@ -24,6 +25,9 @@ class Renderer {
     this.update();
     this.ctx.putImageData(this.imgData, 0, 0);
 
+    //select
+    this.select = this.createSelect();
+
     //helpers
     this.fps = document.createElement("div");
     this.tips = document.createElement("div");
@@ -32,9 +36,18 @@ class Renderer {
   }
 
   attach(parent) {
-    parent.appendChild(this.canvas);
-    parent.appendChild(this.fps);
-    parent.appendChild(this.tips);
+    const canvasContainer = document.createElement("div");
+    canvasContainer.classList.add("gameboyRenderer");
+    canvasContainer.appendChild(this.select);
+    canvasContainer.appendChild(this.canvas);
+    parent.appendChild(canvasContainer);
+
+    const tipsContainer = document.createElement("div");
+    tipsContainer.classList.add("tips");
+    tipsContainer.appendChild(this.fps);
+    tipsContainer.appendChild(this.tips);
+
+    parent.appendChild(tipsContainer);
   }
 
   update() {
@@ -77,6 +90,24 @@ class Renderer {
     };
 
     requestAnimationFrame(_frame);
+  }
+
+  createSelect() {
+    const select = document.createElement("select");
+    for ( const [key, value] of Object.entries(roms) ) {
+      const option = document.createElement("option");
+      option.value = value;
+      option.innerText = key;
+      select.appendChild(option);
+    }
+
+    select.addEventListener("change", (e) => this.onGameChange(e.target.value));
+    return select;
+  }
+
+  async onGameChange(gameUrl) {
+    this.system.cartridge = await ROMCartridge.load(gameUrl);
+    this.system.boot();    
   }
 }
 
