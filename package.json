@@ -8,12 +8,15 @@
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "serve": "browserify index.js -o bundle.js && http-server"
+    "serve": "browserify index.js -o bundle.js && http-server",
+    "vite": "vite",
+    "build": "vite build",
+    "prettier": "npx prettier --write ."
   },
   "author": "",
   "license": "ISC",
-  "dependencies": {
-    "http-server": "^14.1.1",
-    "watchify": "^4.0.0"
+  "devDependencies": {
+    "prettier": "2.8.8",
+    "vite": "^4.3.5"
   }
 }

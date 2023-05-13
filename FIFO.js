@@ -1,44 +1,44 @@
 //Non resizable FIFO
 
 class FIFO {
-    constructor(size) {
-        this.size = size;
-        this.buffer = new Array(size);
-        this.reset();
-    }
+  constructor(size) {
+    this.size = size;
+    this.buffer = new Array(size);
+    this.reset();
+  }
 
-    push(x) {
-        this.buffer[this.tail] = x;
-        if ( this.length && this.head == this.tail )
-            this.head = (this.head + 1)%this.size;
-        
-        this.tail = (this.tail + 1)%this.size;
-        this.length = Math.min(this.length + 1, this.size);
-    }
+  push(x) {
+    this.buffer[this.tail] = x;
+    if (this.length && this.head == this.tail)
+      this.head = (this.head + 1) % this.size;
 
-    //no checks -- fix
-    put(off, x) {
-        let idx = (this.head + off) % this.size;
-        this.buffer[idx] = x;
-    }
+    this.tail = (this.tail + 1) % this.size;
+    this.length = Math.min(this.length + 1, this.size);
+  }
 
-    get(off) {
-        let idx = (this.head + off) % this.size;
-        return this.buffer[idx];
-    }
+  //no checks -- fix
+  put(off, x) {
+    let idx = (this.head + off) % this.size;
+    this.buffer[idx] = x;
+  }
 
-    pop() {
-        if ( !this.length ) return null;
-        let ret = this.buffer[this.head];
-        this.head = (this.head + 1)%this.size;
-        this.length = Math.max(this.length - 1, 0);
-        return ret;
-    }
+  get(off) {
+    let idx = (this.head + off) % this.size;
+    return this.buffer[idx];
+  }
 
-    reset() {
-        this.length = 0;
-        this.head = this.tail = 0;
-    }
+  pop() {
+    if (!this.length) return null;
+    let ret = this.buffer[this.head];
+    this.head = (this.head + 1) % this.size;
+    this.length = Math.max(this.length - 1, 0);
+    return ret;
+  }
+
+  reset() {
+    this.length = 0;
+    this.head = this.tail = 0;
+  }
 }
 
-module.exports = FIFO;
+export default FIFO;
